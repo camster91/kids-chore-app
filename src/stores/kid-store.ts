@@ -1,0 +1,84 @@
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+export interface Kid {
+  id: string
+  name: string
+  age: number
+  avatarId: string
+  themeMode: 'GIRL' | 'BOY' | 'NEUTRAL'
+  primaryColor: string
+  secondaryColor: string
+  points: number
+  totalPoints: number
+  streakDays: number
+  level: number
+  experience: number
+}
+
+interface KidState {
+  currentKid: Kid | null
+  kids: Kid[]
+
+  setCurrentKid: (kid: Kid | null) => void
+  setKids: (kids: Kid[]) => void
+  addKid: (kid: Kid) => void
+  updateKid: (kidId: string, updates: Partial<Kid>) => void
+  removeKid: (kidId: string) => void
+  addPoints: (amount: number) => void
+}
+
+export const useKidStore = create<KidState>()(
+  persist(
+    (set, get) => ({
+      currentKid: null,
+      kids: [],
+
+      setCurrentKid: (kid) => set({ currentKid: kid }),
+
+      setKids: (kids) => set({ kids }),
+
+      addKid: (kid) =>
+        set((state) => ({
+          kids: [...state.kids, kid],
+        })),
+
+      updateKid: (kidId, updates) =>
+        set((state) => ({
+          kids: state.kids.map((k) =>
+            k.id === kidId ? { ...k, ...updates } : k
+          ),
+          currentKid:
+            state.currentKid?.id === kidId
+              ? { ...state.currentKid, ...updates }
+              : state.currentKid,
+        })),
+
+      removeKid: (kidId) =>
+        set((state) => ({
+          kids: state.kids.filter((k) => k.id !== kidId),
+          currentKid:
+            state.currentKid?.id === kidId ? null : state.currentKid,
+        })),
+
+      addPoints: (amount) => {
+        const state = get()
+        if (!state.currentKid) return
+
+        const newPoints = state.currentKid.points + amount
+        const newTotalPoints = state.currentKid.totalPoints + amount
+
+        set({
+          currentKid: {
+            ...state.currentKid,
+            points: newPoints,
+            totalPoints: newTotalPoints,
+          },
+        })
+      },
+    }),
+    {
+      name: 'kids-chore-kid',
+    }
+  )
+)
