@@ -1,52 +1,23 @@
-import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { getToken } from 'next-auth/jwt'
 
-export default withAuth(
-  function middleware() {
-    // Allow the request to proceed
-    return NextResponse.next()
-  },
-  {
-    callbacks: {
-      authorized: ({ token, req }) => {
-        // Allow access to auth-related routes without a token
-        const pathname = req.nextUrl.pathname
+export async function middleware(request: NextRequest) {
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET
+  })
 
-        // Public routes that don't need authentication
-        const publicRoutes = ['/', '/login', '/signup']
-        if (publicRoutes.includes(pathname)) {
-          return true
-        }
+  const pathname = request.nextUrl.pathname
 
-        // API routes that should be publicly accessible
-        if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/register')) {
-          return true
-        }
-
-        // Health check endpoint
-        if (pathname === '/api/health') {
-          return true
-        }
-
-        // All other routes require authentication
-        return !!token
-      },
-    },
-    pages: {
-      signIn: '/login',
-    },
+  // Redirect logged-in users away from auth pages
+  if (token && (pathname === '/login' || pathname === '/signup')) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
-)
+
+  return NextResponse.next()
+}
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/login', '/signup'],
 }
