@@ -3,13 +3,20 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import prisma from '@/lib/db'
 
-// Validate required environment variables
-if (!process.env.NEXTAUTH_SECRET) {
-  console.error('NEXTAUTH_SECRET is not set. Authentication will fail.')
+// Validate required environment variables at startup
+const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET
+
+if (!NEXTAUTH_SECRET) {
+  console.error(
+    '[NextAuth] CRITICAL: NEXTAUTH_SECRET is not set.\n' +
+    'Authentication will fail with a "Configuration" error.\n' +
+    'Set NEXTAUTH_SECRET in your environment variables.\n' +
+    'Generate one with: openssl rand -base64 32'
+  )
 }
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: NEXTAUTH_SECRET,
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -77,6 +84,7 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
     newUser: '/signup',
+    error: '/auth/error',
   },
   session: {
     strategy: 'jwt',
