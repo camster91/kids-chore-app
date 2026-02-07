@@ -1,14 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
   CheckCircle,
-  Clock,
   Star,
-  Filter,
-  Calendar,
   Sparkles,
 } from 'lucide-react'
 import { useKidStore } from '@/stores/kid-store'
@@ -20,11 +17,19 @@ interface Chore {
   id: string
   title: string
   description?: string
-  points: number
+  basePoints: number
   difficulty: 'EASY' | 'MEDIUM' | 'HARD'
-  completed: boolean
-  dueTime?: string
   icon: string
+}
+
+interface ChoreAssignment {
+  id: string
+  choreId: string
+  kidId: string
+  dueDate: string
+  status: 'PENDING' | 'COMPLETED' | 'SKIPPED'
+  pointsEarned?: number
+  chore: Chore
 }
 
 const difficultyColors = {
@@ -35,23 +40,14 @@ const difficultyColors = {
 
 const choreIcons = ['🧹', '🛏️', '🍽️', '🐕', '📚', '🧺', '🗑️', '🌱', '🧼', '🎒']
 
-// Mock data - replace with real data from API
-const initialChores: Chore[] = [
-  { id: '1', title: 'Make my bed', points: 10, difficulty: 'EASY', completed: true, dueTime: '7:00 AM', icon: '🛏️' },
-  { id: '2', title: 'Brush teeth (morning)', points: 5, difficulty: 'EASY', completed: true, dueTime: '7:30 AM', icon: '🪥' },
-  { id: '3', title: 'Feed the dog', points: 15, difficulty: 'EASY', completed: false, dueTime: '8:00 AM', icon: '🐕' },
-  { id: '4', title: 'Clean my room', points: 30, difficulty: 'HARD', completed: false, icon: '🧹' },
-  { id: '5', title: 'Do homework', points: 20, difficulty: 'MEDIUM', completed: false, dueTime: '4:00 PM', icon: '📚' },
-  { id: '6', title: 'Set the table', points: 10, difficulty: 'EASY', completed: false, dueTime: '6:00 PM', icon: '🍽️' },
-  { id: '7', title: 'Take out trash', points: 15, difficulty: 'MEDIUM', completed: false, icon: '🗑️' },
-]
-
 export default function ChoresPage() {
-  const { currentKid, addPoints } = useKidStore()
-  const [chores, setChores] = useState<Chore[]>(initialChores)
+  const { currentKid, fetchKids } = useKidStore()
+  const [chores, setChores] = useState<Chore[]>([])
+  const [assignments, setAssignments] = useState<ChoreAssignment[]>([])
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all')
   const [showPointsEarned, setShowPointsEarned] = useState<number | null>(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [newChore, setNewChore] = useState({
     title: '',
     points: 10,
@@ -59,40 +55,100 @@ export default function ChoresPage() {
     icon: '⭐',
   })
 
-  const filteredChores = chores.filter((chore) => {
+  const today = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    if (!currentKid) return
+    let cancelled = false
+    async function loadData() {
+      try {
+        const [choresRes, assignmentsRes] = await Promise.all([
+          fetch('/api/chores'),
+          fetch(`/api/chores?kidId=${currentKid!.id}&date=${today}`),
+        ])
+        if (cancelled) return
+        if (choresRes.ok) setChores(await choresRes.json())
+        if (assignmentsRes.ok) setAssignments(await assignmentsRes.json())
+      } catch {
+        // keep existing state
+      }
+    }
+    loadData()
+    return () => { cancelled = true }
+  }, [currentKid, today])
+
+  // Build display list: assignments for today, plus unassigned chores
+  const assignedChoreIds = new Set(assignments.map((a) => a.choreId))
+  const displayItems = [
+    ...assignments.map((a) => ({
+      id: a.id,
+      assignmentId: a.id,
+      title: a.chore.title,
+      points: a.chore.basePoints,
+      difficulty: a.chore.difficulty,
+      completed: a.status === 'COMPLETED',
+      icon: a.chore.icon,
+    })),
+    ...chores
+      .filter((c) => !assignedChoreIds.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        assignmentId: null as string | null,
+        title: c.title,
+        points: c.basePoints,
+        difficulty: c.difficulty,
+        completed: false,
+        icon: c.icon,
+      })),
+  ]
+
+  const filteredChores = displayItems.filter((chore) => {
     if (filter === 'pending') return !chore.completed
     if (filter === 'completed') return chore.completed
     return true
   })
 
-  const handleCompleteChore = (choreId: string) => {
-    const chore = chores.find((c) => c.id === choreId)
-    if (!chore || chore.completed) return
+  const handleCompleteChore = async (item: typeof displayItems[0]) => {
+    if (item.completed || !currentKid) return
 
-    setChores((prev) =>
-      prev.map((c) => (c.id === choreId ? { ...c, completed: true } : c))
-    )
-
-    // Show points animation
-    setShowPointsEarned(chore.points)
-
-    // Add points to kid's total
-    addPoints(chore.points)
+    if (item.assignmentId) {
+      // Complete existing assignment
+      const res = await fetch(`/api/chores/assignments/${item.assignmentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'COMPLETED' }),
+      })
+      if (res.ok) {
+        setAssignments((prev) =>
+          prev.map((a) => a.id === item.assignmentId ? { ...a, status: 'COMPLETED' as const, pointsEarned: item.points } : a)
+        )
+        setShowPointsEarned(item.points)
+        fetchKids()
+      }
+    }
   }
 
-  const handleAddChore = () => {
+  const handleAddChore = async () => {
     if (!newChore.title) return
+    setSaving(true)
 
-    const chore: Chore = {
-      id: Date.now().toString(),
-      title: newChore.title,
-      points: newChore.points,
-      difficulty: newChore.difficulty,
-      completed: false,
-      icon: newChore.icon,
+    const res = await fetch('/api/chores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newChore.title,
+        basePoints: newChore.points,
+        difficulty: newChore.difficulty,
+        icon: newChore.icon,
+      }),
+    })
+
+    if (res.ok) {
+      const chore = await res.json()
+      setChores((prev) => [...prev, chore])
     }
 
-    setChores((prev) => [...prev, chore])
+    setSaving(false)
     setIsAddModalOpen(false)
     setNewChore({ title: '', points: 10, difficulty: 'EASY', icon: '⭐' })
   }
@@ -113,8 +169,8 @@ export default function ChoresPage() {
     )
   }
 
-  const pendingCount = chores.filter((c) => !c.completed).length
-  const completedCount = chores.filter((c) => c.completed).length
+  const pendingCount = displayItems.filter((c) => !c.completed).length
+  const completedCount = displayItems.filter((c) => c.completed).length
 
   return (
     <div className="space-y-8">
@@ -151,7 +207,7 @@ export default function ChoresPage() {
       {/* Filter Tabs */}
       <div className="flex gap-2">
         {[
-          { key: 'all', label: 'All', count: chores.length },
+          { key: 'all', label: 'All', count: displayItems.length },
           { key: 'pending', label: 'To Do', count: pendingCount },
           { key: 'completed', label: 'Done', count: completedCount },
         ].map((tab) => (
@@ -190,7 +246,7 @@ export default function ChoresPage() {
                 <div className="flex items-start gap-4">
                   {/* Checkbox */}
                   <motion.button
-                    onClick={() => handleCompleteChore(chore.id)}
+                    onClick={() => handleCompleteChore(chore)}
                     disabled={chore.completed}
                     className={cn(
                       'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
@@ -231,12 +287,6 @@ export default function ChoresPage() {
                     </div>
 
                     <div className="flex items-center gap-4 mt-2">
-                      {chore.dueTime && (
-                        <div className="flex items-center gap-1 text-sm text-gray-500">
-                          <Clock className="w-4 h-4" />
-                          {chore.dueTime}
-                        </div>
-                      )}
                       <div className="flex items-center gap-1 text-sm font-semibold text-amber-600">
                         <Star className="w-4 h-4" />
                         +{chore.points}
@@ -362,9 +412,9 @@ export default function ChoresPage() {
             <Button
               className="flex-1"
               onClick={handleAddChore}
-              disabled={!newChore.title}
+              disabled={!newChore.title || saving}
             >
-              Add Chore
+              {saving ? 'Adding...' : 'Add Chore'}
             </Button>
           </div>
         </div>
