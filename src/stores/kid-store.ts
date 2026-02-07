@@ -74,6 +74,11 @@ export const useKidStore = create<KidState>()(
             points: newPoints,
             totalPoints: newTotalPoints,
           },
+          kids: state.kids.map((k) =>
+            k.id === state.currentKid!.id
+              ? { ...k, points: newPoints, totalPoints: newTotalPoints }
+              : k
+          ),
         })
       },
     }),
