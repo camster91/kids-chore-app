@@ -1,19 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import {
-  User,
   Plus,
   Pencil,
   Trash2,
   Check,
-  X,
-  Sparkles,
 } from 'lucide-react'
 import { useKidStore, Kid } from '@/stores/kid-store'
 import { useThemeStore, ThemeMode } from '@/stores/theme-store'
-import { Card, CardContent, Button, Input, Avatar, Modal } from '@/components/ui'
+import { Card, CardContent, Button, Input, Modal } from '@/components/ui'
 import { ThemeSwitcher } from '@/components/themes/ThemeSwitcher'
 import { PointsDisplay, StreakCounter, LevelBadge, AchievementBadge } from '@/components/gamification'
 import { cn } from '@/lib/utils'
@@ -41,11 +38,16 @@ const sampleBadges = [
 ]
 
 export default function ProfilePage() {
-  const { currentKid, kids, setCurrentKid, addKid, updateKid, removeKid } = useKidStore()
+  const { currentKid, kids, setCurrentKid, fetchKids, createKid, deleteKid, updateKidAPI } = useKidStore()
   const { setMode, setCustomColors } = useThemeStore()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingKid, setEditingKid] = useState<Kid | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetchKids()
+  }, [fetchKids])
 
   const [formData, setFormData] = useState({
     name: '',
@@ -56,34 +58,32 @@ export default function ProfilePage() {
     secondaryColor: '#8b5cf6',
   })
 
-  const handleCreateKid = () => {
+  const handleCreateKid = async () => {
     if (!formData.name || !formData.age) return
+    setSaving(true)
 
-    const newKid: Kid = {
-      id: Date.now().toString(),
+    const kid = await createKid({
       name: formData.name,
       age: parseInt(formData.age),
       avatarId: formData.avatarId,
       themeMode: formData.themeMode,
       primaryColor: formData.primaryColor,
       secondaryColor: formData.secondaryColor,
-      points: 0,
-      totalPoints: 0,
-      streakDays: 0,
-      level: 1,
-      experience: 0,
-    }
+    })
 
-    addKid(newKid)
-    setCurrentKid(newKid)
-    setMode(newKid.themeMode)
-    setCustomColors(newKid.primaryColor, newKid.secondaryColor)
-    setIsCreateModalOpen(false)
-    resetForm()
+    setSaving(false)
+    if (kid) {
+      setCurrentKid(kid)
+      setMode(kid.themeMode)
+      setCustomColors(kid.primaryColor, kid.secondaryColor)
+      setIsCreateModalOpen(false)
+      resetForm()
+    }
   }
 
-  const handleEditKid = () => {
+  const handleEditKid = async () => {
     if (!editingKid || !formData.name || !formData.age) return
+    setSaving(true)
 
     const updates = {
       name: formData.name,
@@ -94,7 +94,8 @@ export default function ProfilePage() {
       secondaryColor: formData.secondaryColor,
     }
 
-    updateKid(editingKid.id, updates)
+    await updateKidAPI(editingKid.id, updates)
+    setSaving(false)
 
     if (currentKid?.id === editingKid.id) {
       setMode(formData.themeMode)
@@ -106,9 +107,9 @@ export default function ProfilePage() {
     resetForm()
   }
 
-  const handleDeleteKid = (kid: Kid) => {
+  const handleDeleteKid = async (kid: Kid) => {
     if (confirm(`Are you sure you want to remove ${kid.name}?`)) {
-      removeKid(kid.id)
+      await deleteKid(kid.id)
     }
   }
 
@@ -354,9 +355,9 @@ export default function ProfilePage() {
             <Button
               className="flex-1"
               onClick={handleCreateKid}
-              disabled={!formData.name || !formData.age}
+              disabled={!formData.name || !formData.age || saving}
             >
-              Create Profile
+              {saving ? 'Creating...' : 'Create Profile'}
             </Button>
           </div>
         </div>
@@ -438,9 +439,9 @@ export default function ProfilePage() {
             <Button
               className="flex-1"
               onClick={handleEditKid}
-              disabled={!formData.name || !formData.age}
+              disabled={!formData.name || !formData.age || saving}
             >
-              Save Changes
+              {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </div>

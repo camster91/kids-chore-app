@@ -1,47 +1,35 @@
 'use client'
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import {
-  Gift,
   Plus,
   Star,
-  ShoppingCart,
   Check,
   Sparkles,
 } from 'lucide-react'
 import { useKidStore } from '@/stores/kid-store'
-import { Card, CardContent, Button, Badge, Modal, Input } from '@/components/ui'
+import { Card, CardContent, Button, Modal, Input } from '@/components/ui'
 import { PointsDisplay } from '@/components/gamification'
 import { cn } from '@/lib/utils'
 
 interface Reward {
   id: string
   title: string
-  description?: string
+  description?: string | null
   cost: number
   icon: string
-  category: string
 }
 
 const rewardIcons = ['🎮', '📱', '🍦', '🎬', '🛍️', '🎨', '📚', '🎵', '⚽', '🎁']
 
-// Mock data
-const initialRewards: Reward[] = [
-  { id: '1', title: '30 min Screen Time', description: 'Extra screen time for games or videos', cost: 50, icon: '🎮', category: 'Screen Time' },
-  { id: '2', title: 'Ice Cream Trip', description: 'Visit to the ice cream shop', cost: 100, icon: '🍦', category: 'Treats' },
-  { id: '3', title: 'Movie Night Pick', description: 'Choose the family movie', cost: 75, icon: '🎬', category: 'Activities' },
-  { id: '4', title: 'Stay Up Late (30 min)', description: 'Extra 30 minutes before bedtime', cost: 60, icon: '🌙', category: 'Privileges' },
-  { id: '5', title: 'Skip One Chore', description: 'Get a free pass on one chore', cost: 80, icon: '🎫', category: 'Privileges' },
-  { id: '6', title: 'Small Toy/Book', description: 'Pick a small toy or book (up to $10)', cost: 200, icon: '🎁', category: 'Prizes' },
-]
-
 export default function RewardsPage() {
-  const { currentKid, updateKid } = useKidStore()
-  const [rewards, setRewards] = useState<Reward[]>(initialRewards)
+  const { currentKid, fetchKids } = useKidStore()
+  const [rewards, setRewards] = useState<Reward[]>([])
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [newReward, setNewReward] = useState({
     title: '',
     description: '',
@@ -49,33 +37,65 @@ export default function RewardsPage() {
     icon: '🎁',
   })
 
-  const handleRedeemReward = (reward: Reward) => {
+  useEffect(() => {
+    let cancelled = false
+    async function loadRewards() {
+      try {
+        const res = await fetch('/api/rewards')
+        if (cancelled) return
+        if (res.ok) setRewards(await res.json())
+      } catch {
+        // keep existing state
+      }
+    }
+    loadRewards()
+    return () => { cancelled = true }
+  }, [])
+
+  const handleRedeemReward = async (reward: Reward) => {
     if (!currentKid || currentKid.points < reward.cost) return
+    setSaving(true)
 
-    // Deduct points
-    updateKid(currentKid.id, { points: currentKid.points - reward.cost })
+    const res = await fetch('/api/rewards/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rewardId: reward.id, kidId: currentKid.id }),
+    })
 
-    // Show success
-    setShowSuccess(true)
-    setTimeout(() => {
-      setShowSuccess(false)
-      setSelectedReward(null)
-    }, 2000)
+    setSaving(false)
+
+    if (res.ok) {
+      // Refresh kid data to get updated points
+      fetchKids()
+      setShowSuccess(true)
+      setTimeout(() => {
+        setShowSuccess(false)
+        setSelectedReward(null)
+      }, 2000)
+    }
   }
 
-  const handleAddReward = () => {
+  const handleAddReward = async () => {
     if (!newReward.title) return
+    setSaving(true)
 
-    const reward: Reward = {
-      id: Date.now().toString(),
-      title: newReward.title,
-      description: newReward.description,
-      cost: newReward.cost,
-      icon: newReward.icon,
-      category: 'Custom',
+    const res = await fetch('/api/rewards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newReward.title,
+        description: newReward.description || null,
+        cost: newReward.cost,
+        icon: newReward.icon,
+      }),
+    })
+
+    if (res.ok) {
+      const reward = await res.json()
+      setRewards((prev) => [...prev, reward])
     }
 
-    setRewards((prev) => [...prev, reward])
+    setSaving(false)
     setIsAddModalOpen(false)
     setNewReward({ title: '', description: '', cost: 50, icon: '🎁' })
   }
@@ -153,9 +173,6 @@ export default function RewardsPage() {
                     >
                       {reward.icon}
                     </div>
-                    <Badge variant={canAfford ? 'primary' : 'info'}>
-                      {reward.category}
-                    </Badge>
                   </div>
 
                   <h3 className="text-lg font-bold">{reward.title}</h3>
@@ -185,6 +202,18 @@ export default function RewardsPage() {
           )
         })}
       </div>
+
+      {rewards.length === 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-12"
+        >
+          <div className="text-6xl mb-4">🎁</div>
+          <h3 className="text-xl font-semibold">No rewards yet</h3>
+          <p className="text-gray-500 mt-1">Add some rewards to motivate your ChoreChamps!</p>
+        </motion.div>
+      )}
 
       {/* Redeem Confirmation Modal */}
       <Modal
@@ -241,8 +270,9 @@ export default function RewardsPage() {
               <Button
                 className="flex-1"
                 onClick={() => handleRedeemReward(selectedReward)}
+                disabled={saving}
               >
-                Confirm
+                {saving ? 'Redeeming...' : 'Confirm'}
               </Button>
             </div>
           </div>
@@ -324,9 +354,9 @@ export default function RewardsPage() {
             <Button
               className="flex-1"
               onClick={handleAddReward}
-              disabled={!newReward.title}
+              disabled={!newReward.title || saving}
             >
-              Add Reward
+              {saving ? 'Adding...' : 'Add Reward'}
             </Button>
           </div>
         </div>

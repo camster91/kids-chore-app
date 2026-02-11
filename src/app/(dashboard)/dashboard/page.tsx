@@ -1,13 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
   CheckCircle,
   Clock,
   Star,
-  Flame,
-  Trophy,
   ArrowRight,
   Sparkles,
 } from 'lucide-react'
@@ -15,23 +14,70 @@ import { useKidStore } from '@/stores/kid-store'
 import { Card, CardContent, Button, Badge, Progress } from '@/components/ui'
 import { PointsDisplay, StreakCounter, LevelBadge } from '@/components/gamification'
 
-// Mock data - replace with real data from API
-const todaysChores = [
-  { id: '1', title: 'Make my bed', points: 10, completed: true },
-  { id: '2', title: 'Brush teeth (morning)', points: 5, completed: true },
-  { id: '3', title: 'Feed the dog', points: 15, completed: false },
-  { id: '4', title: 'Clean my room', points: 30, completed: false },
-  { id: '5', title: 'Do homework', points: 20, completed: false },
-]
-
-const recentBadges = [
-  { id: '1', name: 'Early Bird', icon: '🌅', earned: true },
-  { id: '2', name: '7-Day Streak', icon: '🔥', earned: true },
-  { id: '3', name: 'Super Helper', icon: '🦸', earned: false },
-]
+interface ChoreItem {
+  id: string
+  title: string
+  points: number
+  completed: boolean
+}
 
 export default function DashboardPage() {
-  const { currentKid } = useKidStore()
+  const { currentKid, fetchKids } = useKidStore()
+  const [todaysChores, setTodaysChores] = useState<ChoreItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const today = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    fetchKids()
+  }, [fetchKids])
+
+  useEffect(() => {
+    if (!currentKid) return
+    let cancelled = false
+    async function loadDashboard() {
+      try {
+        const [assignmentsRes, choresRes] = await Promise.all([
+          fetch(`/api/chores?kidId=${currentKid!.id}&date=${today}`),
+          fetch('/api/chores'),
+        ])
+        if (cancelled) return
+
+        const items: ChoreItem[] = []
+
+        if (assignmentsRes.ok) {
+          const assignments = await assignmentsRes.json()
+          for (const a of assignments) {
+            items.push({
+              id: a.id,
+              title: a.chore.title,
+              points: a.chore.basePoints,
+              completed: a.status === 'COMPLETED',
+            })
+          }
+        }
+
+        if (items.length === 0 && choresRes.ok) {
+          const chores = await choresRes.json()
+          for (const c of chores) {
+            items.push({
+              id: c.id,
+              title: c.title,
+              points: c.basePoints,
+              completed: false,
+            })
+          }
+        }
+
+        setTodaysChores(items)
+      } catch {
+        // keep empty state
+      }
+      setLoading(false)
+    }
+    loadDashboard()
+    return () => { cancelled = true }
+  }, [currentKid, today])
 
   const completedCount = todaysChores.filter((c) => c.completed).length
   const totalPoints = todaysChores.reduce((sum, c) => (c.completed ? sum + c.points : sum), 0)
@@ -103,7 +149,7 @@ export default function DashboardPage() {
             </div>
             <Progress
               value={completedCount}
-              max={todaysChores.length}
+              max={todaysChores.length || 1}
               className="mt-4"
             />
           </Card>
@@ -126,7 +172,7 @@ export default function DashboardPage() {
                 <Star className="w-7 h-7 text-amber-500" />
               </div>
             </div>
-            <Progress value={totalPoints} max={possiblePoints} className="mt-4" />
+            <Progress value={totalPoints} max={possiblePoints || 1} className="mt-4" />
           </Card>
         </motion.div>
 
@@ -179,84 +225,47 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="space-y-3">
-              {todaysChores.map((chore, index) => (
-                <motion.div
-                  key={chore.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 + index * 0.05 }}
-                  className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer
-                    ${
-                      chore.completed
-                        ? 'bg-green-50 border-green-200'
-                        : 'bg-white border-gray-200 hover:border-[var(--color-primary)]'
-                    }`}
-                >
-                  <motion.div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center
-                      ${chore.completed ? 'bg-green-500' : 'border-2 border-gray-300'}`}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    {chore.completed && <CheckCircle className="w-5 h-5 text-white" />}
-                  </motion.div>
-                  <span
-                    className={`flex-1 font-medium ${
-                      chore.completed ? 'line-through text-gray-400' : 'text-gray-700'
-                    }`}
-                  >
-                    {chore.title}
-                  </span>
-                  <Badge variant={chore.completed ? 'success' : 'primary'}>
-                    +{chore.points}
-                  </Badge>
-                </motion.div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Recent Badges */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-      >
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-500" />
-                <h2 className="text-xl font-bold">Recent Badges</h2>
+            {todaysChores.length === 0 && !loading ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>No chores for today. Add some from the Chores page!</p>
               </div>
-              <Link href="/profile">
-                <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                  View All
-                </Button>
-              </Link>
-            </div>
-
-            <div className="flex gap-4 overflow-x-auto pb-2">
-              {recentBadges.map((badge, index) => (
-                <motion.div
-                  key={badge.id}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.7 + index * 0.1 }}
-                  className={`flex flex-col items-center p-4 rounded-xl min-w-[100px]
-                    ${
-                      badge.earned
-                        ? 'bg-amber-50 border-2 border-amber-200'
-                        : 'bg-gray-100 border-2 border-gray-200 opacity-50'
-                    }`}
-                >
-                  <span className="text-3xl mb-2">{badge.icon}</span>
-                  <span className="text-sm font-medium text-center">{badge.name}</span>
-                </motion.div>
-              ))}
-            </div>
+            ) : (
+              <div className="space-y-3">
+                {todaysChores.slice(0, 5).map((chore, index) => (
+                  <motion.div
+                    key={chore.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.5 + index * 0.05 }}
+                    className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer
+                      ${
+                        chore.completed
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-white border-gray-200 hover:border-[var(--color-primary)]'
+                      }`}
+                  >
+                    <motion.div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center
+                        ${chore.completed ? 'bg-green-500' : 'border-2 border-gray-300'}`}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      {chore.completed && <CheckCircle className="w-5 h-5 text-white" />}
+                    </motion.div>
+                    <span
+                      className={`flex-1 font-medium ${
+                        chore.completed ? 'line-through text-gray-400' : 'text-gray-700'
+                      }`}
+                    >
+                      {chore.title}
+                    </span>
+                    <Badge variant={chore.completed ? 'success' : 'primary'}>
+                      +{chore.points}
+                    </Badge>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
