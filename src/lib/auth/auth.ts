@@ -3,7 +3,13 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import prisma from '@/lib/db'
 
+// Validate required environment variables
+if (!process.env.NEXTAUTH_SECRET) {
+  console.error('NEXTAUTH_SECRET is not set. Authentication will fail.')
+}
+
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -12,33 +18,42 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            console.error('Auth error: Missing email or password')
+            return null
+          }
+
+          const parent = await prisma.parent.findUnique({
+            where: { email: credentials.email },
+            include: { family: true },
+          })
+
+          if (!parent) {
+            console.log('Auth: No user found with email:', credentials.email)
+            return null
+          }
+
+          const isPasswordValid = await bcrypt.compare(
+            credentials.password,
+            parent.password
+          )
+
+          if (!isPasswordValid) {
+            console.log('Auth: Invalid password for user:', credentials.email)
+            return null
+          }
+
+          return {
+            id: parent.id,
+            email: parent.email,
+            name: parent.name,
+            familyId: parent.family?.id,
+          }
+        } catch (error) {
+          console.error('Auth error in authorize:', error)
+          // Return null instead of throwing to prevent 500 errors
           return null
-        }
-
-        const parent = await prisma.parent.findUnique({
-          where: { email: credentials.email },
-          include: { family: true },
-        })
-
-        if (!parent) {
-          return null
-        }
-
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          parent.password
-        )
-
-        if (!isPasswordValid) {
-          return null
-        }
-
-        return {
-          id: parent.id,
-          email: parent.email,
-          name: parent.name,
-          familyId: parent.family?.id,
         }
       },
     }),
@@ -47,14 +62,14 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
-        token.familyId = (user as any).familyId
+        token.familyId = user.familyId
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string
-        ;(session.user as any).familyId = token.familyId
+        session.user.familyId = token.familyId
       }
       return session
     },
@@ -66,4 +81,5 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
+  debug: process.env.NODE_ENV === 'development',
 }
