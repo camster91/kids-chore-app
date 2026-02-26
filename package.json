@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
+    "seed": "tsx prisma/seed.ts",
+    "setup": "npm run prisma:generate && npm run prisma:push && npm run seed"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.1",
@@ -32,6 +38,7 @@
     "eslint-config-next": "16.1.5",
     "prisma": "^5.22.0",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
