@@ -5,18 +5,31 @@ services:
     image: postgres:15-alpine
     container_name: kids_chore_app_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: choreschamps
+      POSTGRES_PASSWORD: Chores2026!
       POSTGRES_DB: kids_chore_app
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U choreschamps -d kids_chore_app"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  app:
+    build: .
+    container_name: kids_chore_app
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://choreschamps:Chores2026!@postgres:5432/kids_chore_app
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: https://chores.ashbi.ca
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:
