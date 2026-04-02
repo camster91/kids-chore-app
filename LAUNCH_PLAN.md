@@ -6,11 +6,11 @@
 - [ ] Update README with accurate project details and setup instructions
 - [ ] Verify environment variables and dependencies
 
-## Phase 2: Deployment
-- [ ] Set up hosting (Vercel/Netlify for frontend, Render/Railway for backend)
-- [ ] Configure custom domain (if applicable)
-- [ ] Setup CI/CD pipeline via GitHub Actions
-- [ ] Add analytics (Google Analytics or PostHog)
+## Phase 2: Deployment [DONE]
+- [x] Set up hosting (Vercel/Netlify for frontend, Render/Railway for backend) - *Transitioned to self-hosted Coolify*
+- [x] Configure custom domain (if applicable)
+- [x] Setup CI/CD pipeline via GitHub Actions
+- [x] Add analytics (Google Analytics or PostHog)
 
 ## Phase 3: Launch
 - [ ] Prepare app store assets (if mobile) or social media graphics
