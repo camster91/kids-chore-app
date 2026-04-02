@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import './globals.css'
 import { Providers } from './providers'
+import { Suspense } from 'react'
+import PostHogPageView from '@/components/PostHogPageView'
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff2',
@@ -29,7 +31,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Suspense fallback={null}>
+            <PostHogPageView />
+          </Suspense>
+          {children}
+        </Providers>
       </body>
     </html>
   )
