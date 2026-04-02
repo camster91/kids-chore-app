@@ -7,44 +7,16 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-// ============== ENUMS ==============
-
-enum ThemeMode {
-  GIRL
-  BOY
-  NEUTRAL
-}
-
-enum Difficulty {
-  EASY
-  MEDIUM
-  HARD
-}
-
-enum RecurringType {
-  DAILY
-  WEEKLY
-  MONTHLY
-  WEEKDAYS
-  WEEKENDS
-}
-
-enum TimeOfDay {
-  MORNING
-  AFTERNOON
-  EVENING
-  ANYTIME
-}
-
-enum ChoreStatus {
-  PENDING
-  COMPLETED
-  SKIPPED
-}
+// ============== ENUMS (SIMULATED FOR SQLITE) ==============
+// enum ThemeMode { GIRL, BOY, NEUTRAL }
+// enum Difficulty { EASY, MEDIUM, HARD }
+// enum RecurringType { DAILY, WEEKLY, MONTHLY, WEEKDAYS, WEEKENDS }
+// enum TimeOfDay { MORNING, AFTERNOON, EVENING, ANYTIME }
+// enum ChoreStatus { PENDING, COMPLETED, SKIPPED }
 
 // ============== MODELS ==============
 
@@ -79,7 +51,7 @@ model Kid {
   name          String
   age           Int
   avatarId      String    @default("default")
-  themeMode     ThemeMode @default(NEUTRAL)
+  themeMode     String    @default("NEUTRAL")
   primaryColor  String    @default("#6366f1")
   secondaryColor String   @default("#8b5cf6")
 
@@ -111,9 +83,9 @@ model Chore {
   title         String
   description   String?
   icon          String        @default("star")
-  difficulty    Difficulty    @default(EASY)
+  difficulty    String        @default("EASY")
   basePoints    Int           @default(10)
-  recurring     RecurringType?
+  recurring     String?
   isActive      Boolean       @default(true)
 
   createdAt     DateTime      @default(now())
@@ -130,7 +102,7 @@ model Chore {
 model ChoreAssignment {
   id            String      @id @default(cuid())
   dueDate       DateTime
-  status        ChoreStatus @default(PENDING)
+  status        String      @default("PENDING")
   completedAt   DateTime?
   pointsEarned  Int?
   notes         String?
@@ -154,7 +126,7 @@ model Habit {
   title         String
   description   String?
   icon          String    @default("check")
-  timeOfDay     TimeOfDay @default(ANYTIME)
+  timeOfDay     String    @default("ANYTIME")
   isActive      Boolean   @default(true)
 
   createdAt     DateTime  @default(now())
@@ -274,7 +246,7 @@ model AvatarItem {
   category      String   // "base", "outfit", "accessory", "background"
   imageUrl      String
   unlockCost    Int      @default(0)
-  themeMode     ThemeMode?
+  themeMode     String?
 
   createdAt     DateTime @default(now())
 }

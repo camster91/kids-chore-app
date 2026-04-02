@@ -60,7 +60,7 @@ export default function ProfilePage() {
     if (!formData.name || !formData.age) return
 
     const newKid: Kid = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       name: formData.name,
       age: parseInt(formData.age),
       avatarId: formData.avatarId,
